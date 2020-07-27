@@ -1,4 +1,4 @@
-#include "../src/sgc.h"
+#include "../src/collector.h"
 
 int main() {
   sgc_init();
