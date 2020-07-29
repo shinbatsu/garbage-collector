@@ -31,7 +31,7 @@ static COLLECTOR_Slot *findSlot(uintptr_t addr) {
   COLLECTOR_Slot *tombstone = NULL;
 #ifdef COLLECTOR_DEBUG_HASHTABLE
   int collisiontCount = 0;
-  printf(" * find slot for %p (capacity: %d, count: %d)\n", (void *)addr,
+  printf(" * find slot for %p (size: %d, count: %d)\n", (void *)addr,
          collector->slotsCollection, collector->slotsNum);
 #endif
 
@@ -59,22 +59,22 @@ static COLLECTOR_Slot *findSlot(uintptr_t addr) {
   }
 }
 
-static void adjustSlotsCapacity(int capacity) {
+static void adjustSlotsCapacity(int size) {
   COLLECTOR_Slot *oldSlots = collector->slots;
   int oldCapacity = collector->slotsCollection;
   int oldCount = collector->slotsNum;
 
-  if (capacity <= oldCapacity)
+  if (size <= oldCapacity)
     return;
 
-  collector->slots = malloc(capacity * sizeof(COLLECTOR_Slot));
+  collector->slots = malloc(size * sizeof(COLLECTOR_Slot));
   if (collector->slots == NULL)
     exit(1);
-  collector->slotsCollection = capacity;
+  collector->slotsCollection = size;
   collector->slotsNum = 0;
 
 #ifdef COLLECTOR_DEBUG
-  printf("Adjust slots capacity from %d to %d\n", oldCapacity, capacity);
+  printf("Adjust slots size from %d to %d\n", oldCapacity, size);
 #endif
 
   /* initialize new slots */
@@ -105,4 +105,72 @@ static void adjustSlotsCapacity(int capacity) {
 
   /* free old table */
   free(oldSlots);
+}
+
+
+static void growSlotsCapacity() {
+  int newSize = collector->slotsCollection == 0
+                        ? SLOTS_INITIAL_CAPACITY
+                        : collector->slotsCollection * SLOTS_GROW_FACTOR;
+#ifdef COLLECTOR_DEBUG_HASHTABLE
+  printf(" * grow slots size to %d\n", newSize);
+#endif
+  adjustSlotsCapacity(newSize);
+}
+
+static COLLECTOR_Slot *getSlot(uintptr_t addr) {
+  COLLECTOR_Slot *slot = findSlot(addr);
+  if (slot == NULL ||
+      (slot->addr == 0 &&
+       collector->slotsNum + 1 > collector->slotsCollection * SLOTS_MAX_LOAD)) {
+    growSlotsCapacity();
+    slot = findSlot(addr);
+  }
+  if (slot->addr == 0) {
+    if (slot->flags ==
+        SLOT_UNUSED) {
+      collector->slotsNum++;
+    }
+    slot->addr = addr;
+    slot->flags = SLOT_IN_USE;
+#ifdef COLLECTOR_DEBUG
+    slot->id = collector->lastId++;
+#endif
+  }
+  return slot;
+}
+
+void markGray(COLLECTOR_Slot *slot) {
+  if (collector->grayCount + 1 >= collector->grayCapacity) {
+    collector->grayCapacity = collector->grayCapacity == 0
+                            ? SLOTS_INITIAL_CAPACITY
+                            : collector->grayCapacity * SLOTS_GROW_FACTOR;
+    collector->grayList =
+        realloc(collector->grayList, collector->grayCapacity * sizeof(COLLECTOR_Slot *));
+  }
+  collector->grayList[collector->grayCount++] = slot;
+}
+
+void collector_init_(void *stackBottom) {
+  collector = malloc(sizeof(COLLECTOR));
+  collector->stackBottom = stackBottom;
+  collector->minAddress = UINTPTR_MAX;
+  collector->maxAddress = 0;
+
+  collector->bytesAllocated = 0;
+  collector->nextGC = 1024;
+
+  collector->slots = NULL;
+  collector->slotsNum = 0;
+  collector->slotsCollection = 0;
+
+  collector->grayCount = 0;
+  collector->grayCapacity = 0;
+  collector->grayList = NULL;
+
+#ifdef COLLECTOR_DEBUG
+  collector->lastId = 0;
+
+  printf("== COLLECTOR initialized\n");
+#endif
 }
