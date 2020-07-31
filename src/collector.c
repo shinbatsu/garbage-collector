@@ -174,3 +174,41 @@ void collector_init_(void *stackBottom) {
   printf("== COLLECTOR initialized\n");
 #endif
 }
+
+static void freeSlotAndMemory(COLLECTOR_Slot *slot, int freeMemory) {
+  collector->bytesAllocated -= slot->size;
+
+  if (freeMemory) {
+    free((void *)slot->addr);
+  }
+
+  slot->addr = 0;
+  slot->flags = SLOT_TOMBSTONE;
+  slot->size = 0;
+}
+
+static void freeSlot(COLLECTOR_Slot *slot) {
+  freeSlotAndMemory(slot, 1);
+}
+
+void collector_exit() {
+  for (int i = 0; i < collector->slotsCollection; i++) {
+    COLLECTOR_Slot *slot = &collector->slots[i];
+    if (slot->flags & SLOT_IN_USE)
+      freeSlot(slot);
+  }
+
+  free(collector->slots);
+  free(collector->grayList);
+  free(collector);
+}
+
+static void collectIfNecessary() {
+#ifdef COLLECTOR_STRESS
+  collector_collect();
+#else
+  if (collector->bytesAllocated > collector->nextGC) {
+    collector_collect();
+  }
+#endif
+}
