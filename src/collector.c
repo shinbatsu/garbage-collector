@@ -212,3 +212,72 @@ static void collectIfNecessary() {
   }
 #endif
 }
+
+
+static void updateMemoryAddressRange(const COLLECTOR_Slot *slot) {
+  if ((uintptr_t)slot->addr < collector->minAddress) {
+    collector->minAddress = slot->addr;
+  }
+  if (slot->addr + slot->size > collector->maxAddress) {
+    collector->maxAddress = slot->addr + slot->size;
+  }
+}
+
+void *collector_malloc(size_t size) {
+  void *addr = malloc(size);
+  if (addr == NULL)
+    return NULL;
+
+  collectIfNecessary();
+
+  COLLECTOR_Slot *slot = getSlot((uintptr_t)addr);
+  slot->size = size;
+  slot->addr = (uintptr_t)addr;
+  slot->flags = SLOT_IN_USE;
+
+  collector->bytesAllocated += size;
+
+  updateMemoryAddressRange(slot);
+
+  return addr;
+}
+
+void *collector_realloc(void *ptr, size_t newSize) {
+  if (ptr == NULL) {
+    return collector_malloc(newSize);
+  }
+
+  COLLECTOR_Slot *slot = findSlot((uintptr_t)ptr);
+
+  if (slot == NULL || !(slot->flags & SLOT_IN_USE)) {
+    return collector_malloc(newSize);
+  }
+
+  if (slot->size >= newSize) {
+    return ptr;
+  }
+
+  collectIfNecessary();
+
+  void *newPtr = realloc(ptr, newSize);
+
+  if (newPtr == ptr) {
+    collector->bytesAllocated += newSize - slot->size;
+    slot->size = newSize;
+    updateMemoryAddressRange(slot);
+    return ptr;
+  }
+
+  COLLECTOR_Slot *newSlot = getSlot((uintptr_t)newPtr);
+  newSlot->size = newSize;
+  newSlot->addr = (uintptr_t)newPtr;
+  newSlot->flags = SLOT_IN_USE;
+
+  collector->bytesAllocated += newSize;
+
+  updateMemoryAddressRange(newSlot);
+
+  freeSlotAndMemory(slot, 0);
+
+  return newPtr;
+}
