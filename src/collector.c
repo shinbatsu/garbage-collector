@@ -281,3 +281,83 @@ void *collector_realloc(void *ptr, size_t newSize) {
 
   return newPtr;
 }
+
+
+static void markSlot(COLLECTOR_Slot *slot) {
+  slot->flags |= SLOT_MARKED;
+}
+
+static void checkAddress(void **ptr) {
+  if (collector->slotsNum == 0)
+    return;
+
+  uintptr_t addr = (uintptr_t)*ptr;
+  if (ptr == NULL || addr < collector->minAddress || addr > collector->maxAddress)
+    return;
+
+  COLLECTOR_Slot *slot = findSlot(addr);
+  if (slot->flags & SLOT_IN_USE) {
+    markGray(slot);
+  }
+}
+
+void *getStackTop() {
+  void *top;
+  asm volatile("movq %%rbp, %0;" : "=m"(top));
+  return top;
+}
+
+static void scanRegion(void *begin, void *end) {
+  if (begin == end)
+    return;
+
+  void **ptr;
+
+  if (begin < end) {
+    for (ptr = begin; ptr < (void **)end; ptr++) {
+      checkAddress(ptr);
+    }
+  }
+
+  if (end < begin) {
+    for (ptr = begin; ptr > (void **)end; ptr--) {
+      checkAddress(ptr);
+    }
+  }
+}
+
+void scanStack() {
+  scanRegion(collector->stackBottom, getStackTop());
+}
+
+void trace() {
+  while (collector->grayCount > 0) {
+    COLLECTOR_Slot *slot = collector->grayList[--collector->grayCount];
+    if (slot->flags & SLOT_MARKED)
+      continue;
+    scanRegion((void *)slot->addr, (void *)(slot->addr + slot->size));
+    markSlot(slot);
+  }
+}
+
+void sweep() {
+  for (int i = 0; i < collector->slotsCollection; i++) {
+    COLLECTOR_Slot *slot = &collector->slots[i];
+    if (slot->flags & SLOT_IN_USE) {
+      if (slot->flags & SLOT_MARKED)
+        slot->flags ^= SLOT_MARKED;
+      else
+        freeSlot(slot);
+    }
+  }
+}
+
+void collector_collect() {
+  extern char end, etext;
+  scanRegion(&end, &etext);
+  scanStack();
+  trace();
+  sweep();
+
+  collector->nextGC = collector->bytesAllocated * HEAP_GROW_FACTOR;
+}
