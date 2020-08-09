@@ -22,24 +22,24 @@ void test() {
 typedef struct {
     void *foo;
     int *bar;
-} HeapStuff;
+} heapThings;
 
-HeapStuff *newHeapStuff() {
-    HeapStuff *s = collector_malloc(sizeof(HeapStuff));
+heapThings *newheapThings() {
+    heapThings *s = collector_malloc(sizeof(heapThings));
     s->foo = collector_malloc(1234);
     return s;
 }
 
 
-void recursiveAllocationsFunction(int i, HeapStuff *p) {
+void recursiveAllocationsFunction(int i, heapThings *p) {
     printf(">> recursive allocation function call %d\n", i);
-    p->foo = collector_malloc(sizeof(HeapStuff) + 100);
+    p->foo = collector_malloc(sizeof(heapThings) + 100);
     p->bar = collector_malloc(sizeof(int));
 
-    newHeapStuff();
+    newheapThings();
 
     if (i == 0) return;
-    recursiveAllocationsFunction(i-1, (HeapStuff*)p->foo);
+    recursiveAllocationsFunction(i-1, (heapThings*)p->foo);
     *p->bar = 1;
 }
 
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
     void *b = &a;
 
     for (int i=0; i<100; i++)
-        recursiveAllocationsFunction(10, collector_malloc(sizeof(HeapStuff)));
+        recursiveAllocationsFunction(10, collector_malloc(sizeof(heapThings)));
 
     char bar = 1;
     void **p = NULL;
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
     void *blub = collector_malloc(1000);
     test();
 
-    HeapStuff *s = newHeapStuff();
+    heapThings *s = newheapThings();
     void *blabla = collector_malloc(23);
 
     *(int*)bss1 = 1;
