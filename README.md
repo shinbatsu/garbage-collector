@@ -5,10 +5,10 @@
 2. [Code example](#code-example)
 3. [Limitations](#limitations)
 4. [What it does](#what-it-does)
-   [Pointer Detection](#ptr-detection)
-   4.2 [Hash Table Management](#hash-table-management)
-   4.3 [Stack Scan](#stack-scan)
-   4.4 [Collection Steps](#collection-steps)
+    1. [Pointer Detection](#ptr-detection)
+    2. [Hash Table Management](#hash-table-management)
+    3. [Stack Scan](#stack-scan)
+    4. [Collection Steps](#collection-steps)
 
 
 **BSS** - Block Started by Symbol. Used for static or global vars.
